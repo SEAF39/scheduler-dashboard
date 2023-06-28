@@ -3,13 +3,32 @@ import React, { Component } from "react";
 import classnames from "classnames";
 import Loading from "./Loading";
 import Panel from "./Panel";
+import { setInterview } from "../helpers/reducers";
+import { getTotalInterviews, getLeastPopularTimeSlot, getMostPopularDay, getInterviewsPerDay } from "../helpers/selectors";
 import axios from "axios";
-import {
-  getTotalInterviews,
-  getLeastPopularTimeSlot,
-  getMostPopularDay,
-  getInterviewsPerDay
-} from "../helpers/selectors";
+
+const data = [
+  {
+    id: 1,
+    label: "Total Interviews",
+    getValue: getTotalInterviews
+  },
+  {
+    id: 2,
+    label: "Least Popular Time Slot",
+    getValue: getLeastPopularTimeSlot
+  },
+  {
+    id: 3,
+    label: "Most Popular Day",
+    getValue: getMostPopularDay
+  },
+  {
+    id: 4,
+    label: "Interviews Per Day",
+    getValue: getInterviewsPerDay
+  }
+];
 
 class Dashboard extends Component {
   state = {
@@ -27,6 +46,19 @@ class Dashboard extends Component {
       this.setState({ focused });
     }
 
+    const socket = new WebSocket(process.env.REACT_APP_WEBSOCKET_URL);
+    socket.onmessage = event => {
+      const data = JSON.parse(event.data);
+
+      if (typeof data === "object" && data.type === "SET_INTERVIEW") {
+        this.setState(previousState =>
+          setInterview(previousState, data.id, data.interview)
+        );
+      }
+    };
+
+    this.socket = socket;
+
     Promise.all([
       axios.get("/api/days"),
       axios.get("/api/appointments"),
@@ -41,10 +73,8 @@ class Dashboard extends Component {
     });
   }
 
-  componentDidUpdate(previousProps, previousState) {
-    if (previousState.focused !== this.state.focused) {
-      localStorage.setItem("focused", JSON.stringify(this.state.focused));
-    }
+  componentWillUnmount() {
+    this.socket.close();
   }
 
   selectPanel(id) {
@@ -54,7 +84,7 @@ class Dashboard extends Component {
   }
 
   render() {
-    const { loading, focused, days, appointments, interviewers } = this.state;
+    const { loading, focused, days, appointments } = this.state;
 
     const dashboardClasses = classnames("dashboard", {
       "dashboard--focused": focused
@@ -64,34 +94,11 @@ class Dashboard extends Component {
       return <Loading />;
     }
 
-    const data = [
-      {
-        id: 1,
-        label: "Total Interviews",
-        getValue: getTotalInterviews
-      },
-      {
-        id: 2,
-        label: "Least Popular Time Slot",
-        getValue: getLeastPopularTimeSlot
-      },
-      {
-        id: 3,
-        label: "Most Popular Day",
-        getValue: getMostPopularDay
-      },
-      {
-        id: 4,
-        label: "Interviews Per Day",
-        getValue: getInterviewsPerDay
-      }
-    ];
-
     const panels = data.map((panel) => (
       <Panel
         key={panel.id}
         label={panel.label}
-        value={panel.getValue({ days, appointments, interviewers })}
+        value={panel.getValue({ days, appointments })}
         onSelect={() => this.selectPanel(panel.id)}
       />
     ));
